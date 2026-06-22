@@ -1,0 +1,63 @@
+#!/bin/bash
+
+set -e -u
+
+cd "${GITHUB_WORKSPACE}" || exit 1
+
+TEMP_PATH="$(mktemp -d)"
+PATH="${TEMP_PATH}:$PATH"
+
+echo '::group::🐶 Installing reviewdog ... https://github.com/reviewdog/reviewdog'
+REVIEWDOG_INSTALL_SCRIPT="$(mktemp)"
+curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh \
+  -o "${REVIEWDOG_INSTALL_SCRIPT}"
+sh "${REVIEWDOG_INSTALL_SCRIPT}" -b "${TEMP_PATH}" "${REVIEWDOG_VERSION}" 2>&1
+rm -f "${REVIEWDOG_INSTALL_SCRIPT}"
+echo '::endgroup::'
+
+echo '::group::⚡️ Installing dotenv-linter ... https://github.com/dotenv-linter/dotenv-linter'
+DOTENV_LINTER_INSTALL_SCRIPT="$(mktemp)"
+curl -sSfL https://raw.githubusercontent.com/dotenv-linter/dotenv-linter/master/install.sh \
+  -o "${DOTENV_LINTER_INSTALL_SCRIPT}"
+sh "${DOTENV_LINTER_INSTALL_SCRIPT}" -b "${TEMP_PATH}" "${DOTENV_LINTER_VERSION}" 2>&1
+rm -f "${DOTENV_LINTER_INSTALL_SCRIPT}"
+echo '::endgroup::'
+
+export REVIEWDOG_GITHUB_API_TOKEN="${INPUT_GITHUB_TOKEN}"
+
+# Split flags into arrays to avoid unquoted variable expansion (script injection)
+read -ra DOTENV_LINTER_FLAGS_ARRAY <<< "${INPUT_DOTENV_LINTER_FLAGS}"
+read -ra REVIEWDOG_FLAGS_ARRAY <<< "${INPUT_REVIEWDOG_FLAGS}"
+
+if [ "${INPUT_REPORTER}" = "github-code-suggestions" ]
+then
+      echo '::group::Running ⚡️ dotenv-linter with code suggestions 🐶 ...'
+      dotenv-linter fix --no-color "${DOTENV_LINTER_FLAGS_ARRAY[@]+"${DOTENV_LINTER_FLAGS_ARRAY[@]}"}"
+
+      TMPFILE=$(mktemp)
+      git diff > "${TMPFILE}"
+      git stash -u || true
+      git stash drop || true
+
+      reviewdog \
+        -name="${INPUT_TOOL_NAME}" \
+        -f=diff \
+        -f.diff.strip=1 \
+        -reporter="github-pr-review" \
+        -filter-mode="${INPUT_FILTER_MODE}" \
+        -fail-on-error="${INPUT_FAIL_ON_ERROR}" \
+        "${REVIEWDOG_FLAGS_ARRAY[@]+"${REVIEWDOG_FLAGS_ARRAY[@]}"}" < "${TMPFILE}"
+else
+      echo '::group::Running ⚡️ dotenv-linter with reviewdog 🐶 ...'
+      dotenv-linter --quiet --no-color "${DOTENV_LINTER_FLAGS_ARRAY[@]+"${DOTENV_LINTER_FLAGS_ARRAY[@]}"}" \
+        | reviewdog -f=dotenv-linter \
+          -name="${INPUT_TOOL_NAME}" \
+          -reporter="${INPUT_REPORTER}" \
+          -filter-mode="${INPUT_FILTER_MODE}" \
+          -fail-on-error="${INPUT_FAIL_ON_ERROR}" \
+          "${REVIEWDOG_FLAGS_ARRAY[@]+"${REVIEWDOG_FLAGS_ARRAY[@]}"}"
+fi
+
+EXIT_CODE=$?
+echo '::endgroup::'
+exit ${EXIT_CODE}

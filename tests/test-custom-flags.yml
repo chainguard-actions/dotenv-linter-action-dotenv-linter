@@ -1,0 +1,31 @@
+name: Test with custom dotenv_linter_flags
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create a valid .env file with a custom name
+        run: |
+          printf 'DATABASE_URL=postgres://localhost/mydb\nSECRET_KEY=abc123\n' > "$GITHUB_WORKSPACE/custom.env"
+
+      - name: Run dotenv-linter action with custom flags targeting specific file
+        id: action
+        uses: .
+        with:
+          github_token: fake-token-for-testing
+          dotenv_linter_flags: 'custom.env'
+          reporter: github-pr-check
+          filter_mode: nofilter
+          fail_on_error: 'false'
+          reviewdog_flags: '-reporter=local'
+
+      - name: Assert action completed successfully with custom flags
+        run: |
+          echo "Action completed with custom dotenv_linter_flags"
+          echo "PASS"
