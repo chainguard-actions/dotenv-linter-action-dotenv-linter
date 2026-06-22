@@ -1,0 +1,29 @@
+name: Test with invalid .env file and fail_on_error false
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create an invalid .env file with duplicate keys
+        run: |
+          printf 'FIRST_KEY=value1\nFIRST_KEY=value2\n' > "$GITHUB_WORKSPACE/.env"
+
+      - name: Run dotenv-linter action with fail_on_error false
+        id: action
+        uses: .
+        with:
+          github_token: fake-token-for-local-test
+          reporter: local
+          filter_mode: nofilter
+          fail_on_error: 'false'
+          dotenv_linter_flags: '.env'
+
+      - name: Assert action completed without failing
+        run: |
+          echo "Action completed with fail_on_error=false despite lint errors - PASS"

@@ -1,0 +1,29 @@
+name: Test basic usage with valid .env file
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create a valid .env file
+        run: |
+          printf 'FIRST_KEY=value1\nSECOND_KEY=value2\nTHIRD_KEY=value3\n' > "$GITHUB_WORKSPACE/.env"
+
+      - name: Run dotenv-linter action
+        id: action
+        uses: .
+        with:
+          github_token: fake-token-for-local-test
+          reporter: local
+          filter_mode: nofilter
+          fail_on_error: 'false'
+          dotenv_linter_flags: '.env'
+
+      - name: Assert action completed
+        run: |
+          echo "Action completed without error - PASS"
