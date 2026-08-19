@@ -1,4 +1,4 @@
-name: Test custom dotenv_linter_flags
+name: Test github-code-suggestions reporter path
 on:
   workflow_dispatch:
 jobs:
@@ -9,22 +9,31 @@ jobs:
 
       - name: Create a .env file
         run: |
-          printf 'FOO=bar\nBAR=baz\n' > "$GITHUB_WORKSPACE/.env"
+          printf 'FOO=bar\n' > "$GITHUB_WORKSPACE/.env"
 
-      - name: Set up fake curl and capture dotenv-linter flags
+      - name: Configure git user for stash operations
         run: |
-          # Create stub dotenv-linter that records its arguments
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+      - name: Set up fake curl and binaries for code-suggestions path
+        run: |
+          # Create stub dotenv-linter fix that does nothing (no changes)
           cat > /tmp/fake-dotenv-linter.sh << 'SCRIPT'
           #!/bin/sh
-          # Record args to a file for later assertion
+          # Record subcommand
           echo "$@" > /tmp/dotenv-linter-args.txt
+          # 'fix' subcommand: do nothing (no changes to files)
           exit 0
           SCRIPT
           chmod +x /tmp/fake-dotenv-linter.sh
 
-          # Create stub reviewdog
+          # Create stub reviewdog that records its flags
           cat > /tmp/fake-reviewdog.sh << 'SCRIPT'
           #!/bin/sh
+          # Record args
+          echo "$@" > /tmp/reviewdog-args.txt
+          # Consume stdin
           cat > /dev/null
           exit 0
           SCRIPT
@@ -103,17 +112,16 @@ jobs:
 
           echo "/tmp/fake-bin" >> "$GITHUB_PATH"
 
-      - name: Run action with custom dotenv_linter_flags
+      - name: Run action with github-code-suggestions reporter
         id: action
         uses: .
         with:
           github_token: ${{ github.token }}
-          dotenv_linter_flags: '--skip UnorderedKey'
-          reporter: github-check
+          reporter: github-code-suggestions
           filter_mode: nofilter
           fail_on_error: 'false'
 
-      - name: Assert custom flags were passed to dotenv-linter
+      - name: Assert dotenv-linter fix was called
         run: |
           if [ ! -f /tmp/dotenv-linter-args.txt ]; then
             echo "FAIL: dotenv-linter was not called"
@@ -121,9 +129,24 @@ jobs:
           fi
           ARGS="$(cat /tmp/dotenv-linter-args.txt)"
           echo "dotenv-linter args: $ARGS"
-          if echo "$ARGS" | grep -q "UnorderedKey"; then
-            echo "PASS: custom flag '--skip UnorderedKey' was passed to dotenv-linter"
+          if echo "$ARGS" | grep -q "fix"; then
+            echo "PASS: dotenv-linter fix was called for code-suggestions path"
           else
-            echo "FAIL: expected '--skip UnorderedKey' in dotenv-linter args, got: $ARGS"
+            echo "FAIL: expected 'fix' subcommand in dotenv-linter args, got: $ARGS"
+            exit 1
+          fi
+
+      - name: Assert reviewdog was called with diff format
+        run: |
+          if [ ! -f /tmp/reviewdog-args.txt ]; then
+            echo "FAIL: reviewdog was not called"
+            exit 1
+          fi
+          ARGS="$(cat /tmp/reviewdog-args.txt)"
+          echo "reviewdog args: $ARGS"
+          if echo "$ARGS" | grep -q "\-f=diff"; then
+            echo "PASS: reviewdog was called with -f=diff for code-suggestions path"
+          else
+            echo "FAIL: expected '-f=diff' in reviewdog args, got: $ARGS"
             exit 1
           fi

@@ -12,7 +12,6 @@ REVIEWDOG_INSTALL_SCRIPT="$(mktemp)"
 curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh \
   -o "${REVIEWDOG_INSTALL_SCRIPT}"
 sh "${REVIEWDOG_INSTALL_SCRIPT}" -b "${TEMP_PATH}" "${REVIEWDOG_VERSION}" 2>&1
-rm -f "${REVIEWDOG_INSTALL_SCRIPT}"
 echo '::endgroup::'
 
 echo '::group::⚡️ Installing dotenv-linter ... https://github.com/dotenv-linter/dotenv-linter'
@@ -20,19 +19,27 @@ DOTENV_LINTER_INSTALL_SCRIPT="$(mktemp)"
 curl -sSfL https://raw.githubusercontent.com/dotenv-linter/dotenv-linter/master/install.sh \
   -o "${DOTENV_LINTER_INSTALL_SCRIPT}"
 sh "${DOTENV_LINTER_INSTALL_SCRIPT}" -b "${TEMP_PATH}" "${DOTENV_LINTER_VERSION}" 2>&1
-rm -f "${DOTENV_LINTER_INSTALL_SCRIPT}"
 echo '::endgroup::'
 
 export REVIEWDOG_GITHUB_API_TOKEN="${INPUT_GITHUB_TOKEN}"
 
-# Split flags into arrays to avoid unquoted variable expansion (script injection)
-read -ra DOTENV_LINTER_FLAGS_ARRAY <<< "${INPUT_DOTENV_LINTER_FLAGS}"
-read -ra REVIEWDOG_FLAGS_ARRAY <<< "${INPUT_REVIEWDOG_FLAGS}"
+# Tokenize list-type inputs into arrays (quote-aware, injection-safe)
+dotenv_linter_flags=()
+if [ -n "${INPUT_DOTENV_LINTER_FLAGS}" ]; then
+  while IFS= read -r -d '' t; do dotenv_linter_flags+=("$t"); done \
+    < <(printf '%s' "${INPUT_DOTENV_LINTER_FLAGS}" | xargs printf '%s\0')
+fi
+
+reviewdog_flags=()
+if [ -n "${INPUT_REVIEWDOG_FLAGS}" ]; then
+  while IFS= read -r -d '' t; do reviewdog_flags+=("$t"); done \
+    < <(printf '%s' "${INPUT_REVIEWDOG_FLAGS}" | xargs printf '%s\0')
+fi
 
 if [ "${INPUT_REPORTER}" = "github-code-suggestions" ]
 then
       echo '::group::Running ⚡️ dotenv-linter with code suggestions 🐶 ...'
-      dotenv-linter fix --no-color "${DOTENV_LINTER_FLAGS_ARRAY[@]+"${DOTENV_LINTER_FLAGS_ARRAY[@]}"}"
+      dotenv-linter fix --no-color "${dotenv_linter_flags[@]+"${dotenv_linter_flags[@]}"}"
 
       TMPFILE=$(mktemp)
       git diff > "${TMPFILE}"
@@ -46,16 +53,16 @@ then
         -reporter="github-pr-review" \
         -filter-mode="${INPUT_FILTER_MODE}" \
         -fail-on-error="${INPUT_FAIL_ON_ERROR}" \
-        "${REVIEWDOG_FLAGS_ARRAY[@]+"${REVIEWDOG_FLAGS_ARRAY[@]}"}" < "${TMPFILE}"
+        "${reviewdog_flags[@]+"${reviewdog_flags[@]}"}" < "${TMPFILE}"
 else
       echo '::group::Running ⚡️ dotenv-linter with reviewdog 🐶 ...'
-      dotenv-linter --quiet --no-color "${DOTENV_LINTER_FLAGS_ARRAY[@]+"${DOTENV_LINTER_FLAGS_ARRAY[@]}"}" \
+      dotenv-linter --quiet --no-color "${dotenv_linter_flags[@]+"${dotenv_linter_flags[@]}"}" \
         | reviewdog -f=dotenv-linter \
           -name="${INPUT_TOOL_NAME}" \
           -reporter="${INPUT_REPORTER}" \
           -filter-mode="${INPUT_FILTER_MODE}" \
           -fail-on-error="${INPUT_FAIL_ON_ERROR}" \
-          "${REVIEWDOG_FLAGS_ARRAY[@]+"${REVIEWDOG_FLAGS_ARRAY[@]}"}"
+          "${reviewdog_flags[@]+"${reviewdog_flags[@]}"}"
 fi
 
 EXIT_CODE=$?

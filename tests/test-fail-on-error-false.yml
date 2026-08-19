@@ -1,4 +1,4 @@
-name: Test custom dotenv_linter_flags
+name: Test fail_on_error=false with lint errors
 on:
   workflow_dispatch:
 jobs:
@@ -7,24 +7,25 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create a .env file
+      - name: Create a .env file with issues
         run: |
-          printf 'FOO=bar\nBAR=baz\n' > "$GITHUB_WORKSPACE/.env"
+          printf 'hello=world\nFOO =bar\n' > "$GITHUB_WORKSPACE/.env"
 
-      - name: Set up fake curl and capture dotenv-linter flags
+      - name: Set up fake curl that installs stub binaries
         run: |
-          # Create stub dotenv-linter that records its arguments
+          # Create stub dotenv-linter that reports a lint error
           cat > /tmp/fake-dotenv-linter.sh << 'SCRIPT'
           #!/bin/sh
-          # Record args to a file for later assertion
-          echo "$@" > /tmp/dotenv-linter-args.txt
-          exit 0
+          # Fake dotenv-linter: output a lint warning (non-zero exit for issues)
+          echo ".env:1 LowercaseKey: The hello key should be in uppercase"
+          exit 1
           SCRIPT
           chmod +x /tmp/fake-dotenv-linter.sh
 
-          # Create stub reviewdog
+          # Create stub reviewdog that exits 0 regardless (fail_on_error=false)
           cat > /tmp/fake-reviewdog.sh << 'SCRIPT'
           #!/bin/sh
+          # Fake reviewdog: consume stdin and exit 0 (fail_on_error=false)
           cat > /dev/null
           exit 0
           SCRIPT
@@ -103,27 +104,16 @@ jobs:
 
           echo "/tmp/fake-bin" >> "$GITHUB_PATH"
 
-      - name: Run action with custom dotenv_linter_flags
+      - name: Run action with fail_on_error=false (should succeed even with lint errors)
         id: action
         uses: .
         with:
           github_token: ${{ github.token }}
-          dotenv_linter_flags: '--skip UnorderedKey'
           reporter: github-check
           filter_mode: nofilter
           fail_on_error: 'false'
 
-      - name: Assert custom flags were passed to dotenv-linter
+      - name: Assert action completed successfully despite lint errors
         run: |
-          if [ ! -f /tmp/dotenv-linter-args.txt ]; then
-            echo "FAIL: dotenv-linter was not called"
-            exit 1
-          fi
-          ARGS="$(cat /tmp/dotenv-linter-args.txt)"
-          echo "dotenv-linter args: $ARGS"
-          if echo "$ARGS" | grep -q "UnorderedKey"; then
-            echo "PASS: custom flag '--skip UnorderedKey' was passed to dotenv-linter"
-          else
-            echo "FAIL: expected '--skip UnorderedKey' in dotenv-linter args, got: $ARGS"
-            exit 1
-          fi
+          echo "Action completed without error (fail_on_error=false)"
+          echo "PASS"
