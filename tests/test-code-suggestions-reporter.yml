@@ -1,4 +1,4 @@
-name: Test basic usage with valid .env file
+name: Test github-code-suggestions reporter path
 on:
   workflow_dispatch:
 jobs:
@@ -7,12 +7,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create a valid .env file in workspace
+      - name: Configure git user for stash operations
         run: |
-          cat > "$GITHUB_WORKSPACE/.env" << 'EOF'
-          KEY=value
-          ANOTHER_KEY=another_value
-          EOF
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+
+      - name: Create a valid .env file and commit it
+        run: |
+          echo "KEY=value" > "$GITHUB_WORKSPACE/.env"
+          git add .env
+          git commit -m "Add .env for testing" || true
 
       - name: Set up fake curl, reviewdog, and dotenv-linter
         run: |
@@ -22,7 +26,6 @@ jobs:
           # Fake install script for reviewdog
           cat > /tmp/fake-install-reviewdog.sh << 'SCRIPT'
           #!/bin/sh
-          # Parse -b <dir> and version args
           BINDIR=""
           prev=""
           for arg in "$@"; do
@@ -43,7 +46,7 @@ jobs:
           SCRIPT
           chmod +x /tmp/fake-install-reviewdog.sh
 
-          # Fake install script for dotenv-linter
+          # Fake install script for dotenv-linter (fix mode - no output, just exits 0)
           cat > /tmp/fake-install-dotenv-linter.sh << 'SCRIPT'
           #!/bin/sh
           BINDIR=""
@@ -57,7 +60,7 @@ jobs:
           if [ -n "$BINDIR" ]; then
             cat > "$BINDIR/dotenv-linter" << 'DL'
           #!/bin/sh
-          # Fake dotenv-linter: no issues found
+          # Fake dotenv-linter: in fix mode, do nothing (file already valid)
           exit 0
           DL
             chmod +x "$BINDIR/dotenv-linter"
@@ -65,7 +68,7 @@ jobs:
           SCRIPT
           chmod +x /tmp/fake-install-dotenv-linter.sh
 
-          # Fake curl that serves the fake install scripts
+          # Fake curl
           cat > "$FAKE_BIN/curl" << 'CURL'
           #!/bin/sh
           out=""
@@ -100,15 +103,15 @@ jobs:
 
           echo "$FAKE_BIN" >> "$GITHUB_PATH"
 
-      - name: Run dotenv-linter action (valid .env, no issues expected)
+      - name: Run dotenv-linter action with github-code-suggestions reporter
         id: action
         uses: .
         with:
           github_token: ${{ github.token }}
-          reporter: github-pr-check
+          reporter: github-code-suggestions
           filter_mode: nofilter
           fail_level: none
 
       - name: Assert action completed successfully
         run: |
-          echo "PASS: action completed without error"
+          echo "PASS: action completed with github-code-suggestions reporter"

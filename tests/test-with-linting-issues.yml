@@ -1,4 +1,4 @@
-name: Test basic usage with valid .env file
+name: Test with .env file that has linting issues
 on:
   workflow_dispatch:
 jobs:
@@ -7,12 +7,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Create a valid .env file in workspace
+      - name: Create an .env file with issues
         run: |
-          cat > "$GITHUB_WORKSPACE/.env" << 'EOF'
-          KEY=value
-          ANOTHER_KEY=another_value
-          EOF
+          # Create a .env file with known issues (duplicate key, leading space)
+          printf ' SPACED=\nKEY = VALUE\n\nSECRET="my value"\n\nSECRET=Already defined\n' > "$GITHUB_WORKSPACE/.env"
 
       - name: Set up fake curl, reviewdog, and dotenv-linter
         run: |
@@ -22,7 +20,6 @@ jobs:
           # Fake install script for reviewdog
           cat > /tmp/fake-install-reviewdog.sh << 'SCRIPT'
           #!/bin/sh
-          # Parse -b <dir> and version args
           BINDIR=""
           prev=""
           for arg in "$@"; do
@@ -34,7 +31,7 @@ jobs:
           if [ -n "$BINDIR" ]; then
             cat > "$BINDIR/reviewdog" << 'RD'
           #!/bin/sh
-          # Fake reviewdog: consume stdin and exit 0
+          # Fake reviewdog: consume stdin, always exit 0 (fail_level=none)
           cat > /dev/null
           exit 0
           RD
@@ -43,7 +40,7 @@ jobs:
           SCRIPT
           chmod +x /tmp/fake-install-reviewdog.sh
 
-          # Fake install script for dotenv-linter
+          # Fake install script for dotenv-linter that reports issues
           cat > /tmp/fake-install-dotenv-linter.sh << 'SCRIPT'
           #!/bin/sh
           BINDIR=""
@@ -57,15 +54,18 @@ jobs:
           if [ -n "$BINDIR" ]; then
             cat > "$BINDIR/dotenv-linter" << 'DL'
           #!/bin/sh
-          # Fake dotenv-linter: no issues found
-          exit 0
+          # Fake dotenv-linter: output issues in dotenv-linter format
+          echo ".env:1 LeadingCharacter: Invalid leading character detected"
+          echo ".env:2 SpaceCharacter: Invalid space character detected"
+          echo ".env:6 DuplicatedKey: The SECRET key is duplicated"
+          exit 1
           DL
             chmod +x "$BINDIR/dotenv-linter"
           fi
           SCRIPT
           chmod +x /tmp/fake-install-dotenv-linter.sh
 
-          # Fake curl that serves the fake install scripts
+          # Fake curl
           cat > "$FAKE_BIN/curl" << 'CURL'
           #!/bin/sh
           out=""
@@ -100,7 +100,7 @@ jobs:
 
           echo "$FAKE_BIN" >> "$GITHUB_PATH"
 
-      - name: Run dotenv-linter action (valid .env, no issues expected)
+      - name: Run dotenv-linter action (issues present, fail_level=none so should succeed)
         id: action
         uses: .
         with:
@@ -109,6 +109,6 @@ jobs:
           filter_mode: nofilter
           fail_level: none
 
-      - name: Assert action completed successfully
+      - name: Assert action completed successfully despite issues
         run: |
-          echo "PASS: action completed without error"
+          echo "PASS: action completed with exit 0 because fail_level=none"
