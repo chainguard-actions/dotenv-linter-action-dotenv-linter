@@ -1,0 +1,120 @@
+name: Test basic usage - dotenv-linter with reviewdog
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create a clean .env file for linting
+        run: |
+          # Create a valid .env file in the workspace so dotenv-linter has something to check
+          cat > "$GITHUB_WORKSPACE/.env" << 'EOF'
+          VALID_KEY=value
+          ANOTHER_KEY=another_value
+          EOF
+
+      - name: Set up fake curl that installs mock tools
+        run: |
+          # Create a fake reviewdog install script
+          cat > /tmp/fake-install-reviewdog.sh << 'SCRIPT'
+          #!/bin/sh
+          # Fake reviewdog installer - writes a mock binary to the -b path
+          BINDIR=""
+          prev=""
+          for arg in "$@"; do
+            case "$prev" in
+              -b) BINDIR="$arg" ;;
+            esac
+            prev="$arg"
+          done
+          if [ -z "$BINDIR" ]; then
+            BINDIR="/usr/local/bin"
+          fi
+          cat > "$BINDIR/reviewdog" << 'EOF'
+          #!/bin/sh
+          # Fake reviewdog - consume stdin and exit 0
+          cat > /dev/null
+          echo "reviewdog: no issues found (mock)"
+          exit 0
+          EOF
+          chmod +x "$BINDIR/reviewdog"
+          SCRIPT
+          chmod +x /tmp/fake-install-reviewdog.sh
+
+          # Create a fake dotenv-linter install script
+          cat > /tmp/fake-install-dotenv-linter.sh << 'SCRIPT'
+          #!/bin/sh
+          # Fake dotenv-linter installer - writes a mock binary to the -b path
+          BINDIR=""
+          prev=""
+          for arg in "$@"; do
+            case "$prev" in
+              -b) BINDIR="$arg" ;;
+            esac
+            prev="$arg"
+          done
+          if [ -z "$BINDIR" ]; then
+            BINDIR="/usr/local/bin"
+          fi
+          cat > "$BINDIR/dotenv-linter" << 'EOF'
+          #!/bin/sh
+          # Fake dotenv-linter - exit 0 (no issues)
+          exit 0
+          EOF
+          chmod +x "$BINDIR/dotenv-linter"
+          SCRIPT
+          chmod +x /tmp/fake-install-dotenv-linter.sh
+
+          # Create a fake curl that intercepts the installer URLs
+          mkdir -p /tmp/fake-bin
+          cat > /tmp/fake-bin/curl << 'EOF'
+          #!/bin/sh
+          # Fake curl: serve canned payloads for intercepted URLs, supporting both
+          # "curl URL | sh" (payload to stdout) and hardened "curl -o FILE URL"
+          # (payload written to FILE).
+          out=""
+          prev=""
+          for arg in "$@"; do
+            case "$prev" in
+              -o|--output) out="$arg" ;;
+            esac
+            prev="$arg"
+          done
+          case "$*" in
+            *reviewdog*)
+              if [ -n "$out" ]; then
+                cat /tmp/fake-install-reviewdog.sh > "$out"
+              else
+                cat /tmp/fake-install-reviewdog.sh
+              fi
+              exit 0
+              ;;
+            *dotenv-linter*)
+              if [ -n "$out" ]; then
+                cat /tmp/fake-install-dotenv-linter.sh > "$out"
+              else
+                cat /tmp/fake-install-dotenv-linter.sh
+              fi
+              exit 0
+              ;;
+          esac
+          exec /usr/bin/curl "$@"
+          EOF
+          chmod +x /tmp/fake-bin/curl
+
+      - name: Run action with basic inputs
+        id: action
+        uses: .
+        env:
+          PATH: /tmp/fake-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        with:
+          github_token: ${{ github.token }}
+          reporter: github-pr-check
+          filter_mode: nofilter
+          fail_on_error: 'false'
+
+      - name: Assert action completed successfully
+        run: |
+          echo "PASS: action completed without error"

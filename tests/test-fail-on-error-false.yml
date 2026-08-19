@@ -1,0 +1,111 @@
+name: Test fail_on_error=false - action succeeds even with lint errors
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up fake curl that installs mock tools (dotenv-linter reports errors)
+        run: |
+          # Create a fake reviewdog install script
+          cat > /tmp/fake-install-reviewdog.sh << 'SCRIPT'
+          #!/bin/sh
+          BINDIR=""
+          prev=""
+          for arg in "$@"; do
+            case "$prev" in
+              -b) BINDIR="$arg" ;;
+            esac
+            prev="$arg"
+          done
+          if [ -z "$BINDIR" ]; then
+            BINDIR="/usr/local/bin"
+          fi
+          cat > "$BINDIR/reviewdog" << 'EOF'
+          #!/bin/sh
+          # Fake reviewdog - consume stdin and exit 0 regardless of fail-on-error
+          cat > /dev/null
+          echo "reviewdog: processed (mock)"
+          exit 0
+          EOF
+          chmod +x "$BINDIR/reviewdog"
+          SCRIPT
+          chmod +x /tmp/fake-install-reviewdog.sh
+
+          # Create a fake dotenv-linter install script that reports lint errors
+          cat > /tmp/fake-install-dotenv-linter.sh << 'SCRIPT'
+          #!/bin/sh
+          BINDIR=""
+          prev=""
+          for arg in "$@"; do
+            case "$prev" in
+              -b) BINDIR="$arg" ;;
+            esac
+            prev="$arg"
+          done
+          if [ -z "$BINDIR" ]; then
+            BINDIR="/usr/local/bin"
+          fi
+          cat > "$BINDIR/dotenv-linter" << 'EOF'
+          #!/bin/sh
+          # Fake dotenv-linter - report a lint error (exit 1)
+          echo ".env:1 DuplicatedKey: DUPLICATE_KEY"
+          exit 1
+          EOF
+          chmod +x "$BINDIR/dotenv-linter"
+          SCRIPT
+          chmod +x /tmp/fake-install-dotenv-linter.sh
+
+          # Create a fake curl that intercepts the installer URLs
+          mkdir -p /tmp/fake-bin
+          cat > /tmp/fake-bin/curl << 'EOF'
+          #!/bin/sh
+          # Fake curl: serve canned payloads for intercepted URLs, supporting both
+          # "curl URL | sh" (payload to stdout) and hardened "curl -o FILE URL"
+          # (payload written to FILE).
+          out=""
+          prev=""
+          for arg in "$@"; do
+            case "$prev" in
+              -o|--output) out="$arg" ;;
+            esac
+            prev="$arg"
+          done
+          case "$*" in
+            *reviewdog*)
+              if [ -n "$out" ]; then
+                cat /tmp/fake-install-reviewdog.sh > "$out"
+              else
+                cat /tmp/fake-install-reviewdog.sh
+              fi
+              exit 0
+              ;;
+            *dotenv-linter*)
+              if [ -n "$out" ]; then
+                cat /tmp/fake-install-dotenv-linter.sh > "$out"
+              else
+                cat /tmp/fake-install-dotenv-linter.sh
+              fi
+              exit 0
+              ;;
+          esac
+          exec /usr/bin/curl "$@"
+          EOF
+          chmod +x /tmp/fake-bin/curl
+
+      - name: Run action with fail_on_error=false (should succeed even with lint errors)
+        id: action
+        uses: .
+        env:
+          PATH: /tmp/fake-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        with:
+          github_token: ${{ github.token }}
+          reporter: github-pr-check
+          filter_mode: nofilter
+          fail_on_error: 'false'
+
+      - name: Assert action completed successfully despite lint errors
+        run: |
+          echo "PASS: action completed without error even though dotenv-linter reported issues"
