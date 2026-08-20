@@ -8,8 +8,13 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 
 | Version | Tag | Upstream commit |
 |---------|-----|-----------------|
+| v2 | [`v2`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v2) | [`9c9a09b`](https://github.com/dotenv-linter/action-dotenv-linter/commit/9c9a09ba60235ae0b92b2e2ed8f4268ac76d075f) |
+| v2.23 | [`v2.23`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v2.23) | [`9c9a09b`](https://github.com/dotenv-linter/action-dotenv-linter/commit/9c9a09ba60235ae0b92b2e2ed8f4268ac76d075f) |
 | v2.23.0 | [`v2.23.0`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v2.23.0) | [`9c9a09b`](https://github.com/dotenv-linter/action-dotenv-linter/commit/9c9a09ba60235ae0b92b2e2ed8f4268ac76d075f) |
+| v2.24 | [`v2.24`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v2.24) | [`382525b`](https://github.com/dotenv-linter/action-dotenv-linter/commit/382525b7d91e7b71b52e064b8f1fa5908c4650d2) |
 | v2.24.0 | [`v2.24.0`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v2.24.0) | [`382525b`](https://github.com/dotenv-linter/action-dotenv-linter/commit/382525b7d91e7b71b52e064b8f1fa5908c4650d2) |
+| v3 | [`v3`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v3) | [`afde61c`](https://github.com/dotenv-linter/action-dotenv-linter/commit/afde61cfda2ecffe7bea35837b6f20b956c88689) |
+| v3.0 | [`v3.0`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v3.0) | [`afde61c`](https://github.com/dotenv-linter/action-dotenv-linter/commit/afde61cfda2ecffe7bea35837b6f20b956c88689) |
 | v3.0.0 | [`v3.0.0`](https://github.com/chainguard-actions/dotenv-linter-action-dotenv-linter/tree/v3.0.0) | [`afde61c`](https://github.com/dotenv-linter/action-dotenv-linter/commit/afde61cfda2ecffe7bea35837b6f20b956c88689) |
 
 ## Privacy
