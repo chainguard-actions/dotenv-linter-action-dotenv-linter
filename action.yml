@@ -1,5 +1,5 @@
 name: 'Run dotenv-linter with reviewdog'
-description: "\U0001F436 Run dotenv-linter with reviewdog on pull requests to improve code review experience."
+description: '🐶 Run dotenv-linter with reviewdog on pull requests to improve code review experience.'
 author: 'mgrachev (reviewdog)'
 inputs:
   github_token:

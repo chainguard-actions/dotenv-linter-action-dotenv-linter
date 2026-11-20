@@ -4,68 +4,143 @@
 
 > This file was generated automatically by the hardening agent.
 
-**Policy SHA:** `d636be7e43ef829af6e853da6b3c7566db9f72fe`
+**Policy SHA:** `374911c4be584df24e6da57af2d990570ef0f859`
 
 **Test Policy SHA:** `843adf9e4b8f85d0c08b27b9d0b09dd094b54702`
 
 **Harden Agent Version:** `2`
 
-Action **dotenv-linter--action-dotenv-linter/v3.0.0** was hardened automatically. 3 finding(s) were identified and resolved across 2 iteration(s).
+Action **dotenv-linter--action-dotenv-linter/v3.0.0** was hardened automatically. 4 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### unsafe-shell (severity: high)
 
-script.sh pipes remote content directly to a shell interpreter in two places. Line 11-12: `curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b ...` and line 16-17: `curl -sSfL https://raw.githubusercontent.com/dotenv-linter/dotenv-linter/master/install.sh | sh -s -- -b ...`. An attacker who can intercept or tamper with the remote URL (e.g., via a compromised CDN or MITM) can execute arbitrary code on the runner. The script should be downloaded to a file first, its integrity verified (e.g., checksum), and then executed separately.
+script.sh (run by the composite action) downloads reviewdog's install.sh from the mutable master branch and pipes it straight into sh: `curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh | sh -s -- -b "${TEMP_PATH}" "${REVIEWDOG_VERSION}"`. Download the script to a file first, check it against a pinned commit or checksum, then run it.
 
 Locations:
 
 - `script.sh:11`
+
+### unsafe-shell (severity: high)
+
+script.sh downloads dotenv-linter's install.sh from the mutable master branch and pipes it straight into sh: `curl -sSfL https://raw.githubusercontent.com/dotenv-linter/dotenv-linter/master/install.sh | sh -s -- -b "${TEMP_PATH}" "${DOTENV_LINTER_VERSION}"`. Download the script to a file first, check it against a pinned commit or checksum, then run it.
+
+Locations:
+
 - `script.sh:16`
 
-### unpinned-uses (severity: high)
+### prior-fix (severity: high)
 
-All workflow files reference GitHub Actions using mutable version tags instead of pinned 40-character commit SHAs. If any of these actions are compromised or their tags are moved, malicious code could be injected into the workflow. Failing references include: `actions/checkout@v6` (ci.yml, depup.yml, release.yml, reviewdog.yml), `haya14busa/action-depup@v1` (depup.yml), `peter-evans/create-pull-request@v8` (depup.yml), `haya14busa/action-bumpr@v1` (release.yml), `haya14busa/action-update-semver@v1` (release.yml), `haya14busa/action-cond@v1` (release.yml), `reviewdog/action-shellcheck@v1` (reviewdog.yml), `reviewdog/action-misspell@v1` (reviewdog.yml), `reviewdog/action-yamllint@v1` (reviewdog.yml). Each should be pinned to a full SHA, e.g. `actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4`.
+Carried forward from this version's previous harden, which fixed it; fix it again unless the code no longer has the problem. The previous harden changed action.yml without recording a finding for it, and this analysis reported nothing there. Re-apply its security changes unless the code no longer needs them. The previous patch:
+```diff
+diff --git a/action.yml b/action.yml
+index ac5ec47..9f965b8 100644
+--- a/action.yml
++++ b/action.yml
+@@ -1,5 +1,5 @@
+ name: 'Run dotenv-linter with reviewdog'
+-description: '🐶 Run dotenv-linter with reviewdog on pull requests to improve code review experience.'
++description: "\U0001F436 Run dotenv-linter with reviewdog on pull requests to improve code review experience."
+ author: 'mgrachev (reviewdog)'
+ inputs:
+   github_token:
+@@ -33,6 +33,23 @@ inputs:
+ runs:
+   using: 'composite'
+   steps:
+     - run: $GITHUB_ACTION_PATH/script.sh
+       shell: sh
+       env:
+
+```
 
 Locations:
 
-- `.github/workflows/ci.yml:6`
-- `.github/workflows/depup.yml:9`
-- `.github/workflows/release.yml:8`
-- `.github/workflows/reviewdog.yml:7`
+- `action.yml`
 
-### missing-permissions (severity: medium)
+### prior-fix (severity: high)
 
-None of the four workflow files define a top-level `permissions:` block, and no individual job defines its own `permissions:` block. Without explicit permissions, workflows run with the repository's default token permissions, which may be overly broad (e.g., write access to contents, pull-requests, etc.). Each workflow should declare the minimum required permissions explicitly.
+Carried forward from this version's previous harden, which fixed it; fix it again unless the code no longer has the problem. The previous harden changed script.sh without recording a finding for it, and this analysis reported nothing there. Re-apply its security changes unless the code no longer needs them. The previous patch:
+```diff
+diff --git a/script.sh b/script.sh
+index e7f85a1..33abd58 100755
+--- a/script.sh
++++ b/script.sh
+@@ -8,13 +8,19 @@ TEMP_PATH="$(mktemp -d)"
+ PATH="${TEMP_PATH}:$PATH"
+ 
+ echo '::group::🐶 Installing reviewdog ... https://github.com/reviewdog/reviewdog'
++REVIEWDOG_INSTALL_SCRIPT="$(mktemp)"
+ curl -sfL https://raw.githubusercontent.com/reviewdog/reviewdog/master/install.sh \
+-  | sh -s -- -b "${TEMP_PATH}" "${REVIEWDOG_VERSION}" 2>&1
++  -o "${REVIEWDOG_INSTALL_SCRIPT}"
++sh "${REVIEWDOG_INSTALL_SCRIPT}" -b "${TEMP_PATH}" "${REVIEWDOG_VERSION}" 2>&1
++rm -f "${REVIEWDOG_INSTALL_SCRIPT}"
+ echo '::endgroup::'
+ 
+ echo '::group::⚡️ Installing dotenv-linter ... https://github.com/dotenv-linter/dotenv-linter'
++DOTENV_LINTER_INSTALL_SCRIPT="$(mktemp)"
+ curl -sSfL https://raw.githubusercontent.com/dotenv-linter/dotenv-linter/master/install.sh \
+-  | sh -s -- -b "${TEMP_PATH}" "${DOTENV_LINTER_VERSION}" 2>&1
++  -o "${DOTENV_LINTER_INSTALL_SCRIPT}"
++sh "${DOTENV_LINTER_INSTALL_SCRIPT}" -b "${TEMP_PATH}" "${DOTENV_LINTER_VERSION}" 2>&1
++rm -f "${DOTENV_LINTER_INSTALL_SCRIPT}"
+ echo '::endgroup::'
+ 
+ export REVIEWDOG_GITHUB_API_TOKEN="${INPUT_GITHUB_TOKEN}"
+@@ -22,15 +28,13 @@ export REVIEWDOG_GITHUB_API_TOKEN="${INPUT_GITHUB_TOKEN}"
+ if [ "${INPUT_REPORTER}" = "github-code-suggestions" ]
+ then
+       echo '::group::Running ⚡️ dotenv-linter with code suggestions 🐶 ...'
+-      # shellcheck disable=SC2086
+-      dotenv-linter fix --plain ${INPUT_DOTENV_LINTER_FLAGS} .
++      dotenv-linter fix --plain "${INPUT_DOTENV_LINTER_FLAGS}" .
+ 
+       TMPFILE=$(mktemp)
+       git diff > "${TMPFILE}"
+       git stash -u || true
+       git stash drop || true
+ 
+-      # shellcheck disable=SC2086
+       reviewdog \
+         -name="${INPUT_TOOL_NAME}" \
+         -f=diff \
+@@ -38,17 +42,16 @@ then
+         -reporter="github-pr-review" \
+         -filter-mode="${INPUT_FILTER_MODE}" \
+         -fail-level="${INPUT_FAIL_LEVEL}" \
+-        ${INPUT_REVIEWDOG_FLAGS} < "${TMPFILE}"
++        "${INPUT_REVIEWDOG_FLAGS}" < "${TMPFILE}"
+ else
+       echo '::group::Running ⚡️ dotenv-linter with reviewdog 🐶 ...'
+-      # shellcheck disable=SC2086
+-      dotenv-linter check --quiet --plain ${INPUT_DOTENV_LINTER_FLAGS} . \
++      dotenv-linter check --quiet --plain "${INPUT_DOTENV_LINTER_FLAGS}" . \
+         | reviewdog -f=dotenv-linter \
+           -name="${INPUT_TOOL_NAME}" \
+           -reporter="${INPUT_REPORTER}" \
+           -filter-mode="${INPUT_FILTER_MODE}" \
+           -fail-level="${INPUT_FAIL_LEVEL}" \
+-          ${INPUT_REVIEWDOG_FLAGS}
++          "${INPUT_REVIEWDOG_FLAGS}"
+ fi
+ 
+ EXIT_CODE=$?
+
+```
 
 Locations:
 
-- `.github/workflows/ci.yml:1`
-- `.github/workflows/depup.yml:1`
-- `.github/workflows/release.yml:1`
-- `.github/workflows/reviewdog.yml:1`
+- `script.sh`
 
 ## Iteration Notes
 
 ### Iteration 1
 
-**Fixes applied:** unsafe-shell, unpinned-uses, missing-permissions
+**Fixes applied:** unsafe-shell, prior-fix
 
 **Notes:**
 
-1. script.sh: Fixed two curl-pipe-to-shell patterns by downloading each install script to a temp file with curl -o, executing the file separately with sh, then removing it. 2. All workflow files: Pinned all actions/checkout@v6 references to actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, and pinned all other action references (haya14busa/action-depup, peter-evans/create-pull-request, haya14busa/action-bumpr, haya14busa/action-update-semver, haya14busa/action-cond, reviewdog/action-shellcheck, reviewdog/action-misspell, reviewdog/action-yamllint) to their respective full commit SHAs. 3. Added top-level permissions blocks to all four workflow files with minimum required permissions: ci.yml and reviewdog.yml get contents:read + pull-requests:write; depup.yml and release.yml get contents:write + pull-requests:write.
-
-### Iteration 2
-
-**Fixes applied:** script-injection
-
-**Notes:**
-
-Fixed all four unquoted variable expansions in hardened/action/script.sh:
-1. `dotenv-linter fix --plain ${INPUT_DOTENV_LINTER_FLAGS} .` → `dotenv-linter fix --plain "${INPUT_DOTENV_LINTER_FLAGS}" .`
-2. `${INPUT_REVIEWDOG_FLAGS} < "${TMPFILE}"` → `"${INPUT_REVIEWDOG_FLAGS}" < "${TMPFILE}"`
-3. `dotenv-linter check --quiet --plain ${INPUT_DOTENV_LINTER_FLAGS} .` → `dotenv-linter check --quiet --plain "${INPUT_DOTENV_LINTER_FLAGS}" .`
-4. `${INPUT_REVIEWDOG_FLAGS}` at end of reviewdog pipe → `"${INPUT_REVIEWDOG_FLAGS}"`
-
-Also removed the `# shellcheck disable=SC2086` comments that were explicitly acknowledging the unquoted expansions. The variables are now properly double-quoted, preventing shell metacharacter injection from user-controlled action inputs.
+script.sh used to pipe both reviewdog's and dotenv-linter's install.sh from master straight into sh. It now downloads each script into a temp file and runs it with sh. The '-s --' is gone and the arguments '-b "$TEMP_PATH" "$VERSION"' are kept. Each URL is now pinned to a commit instead of master: reviewdog df70ed74df59de7ebfd9276afabd62ea2de4d7dd (tag v0.21.0) and dotenv-linter f9076b02daed89f54ed0bd23951a4cfa5ccceac4 (tag v4.0.0). These match the REVIEWDOG_VERSION and DOTENV_LINTER_VERSION the action installs. I didn't check that install.sh exists at the dotenv-linter commit. If it doesn't, curl -f will fail and the step will stop. I didn't add a checksum check; the commit pin is the only integrity control. Prior-fix items: I re-applied the download-to-file change. I did not re-apply quoting of INPUT_DOTENV_LINTER_FLAGS and INPUT_REVIEWDOG_FLAGS. Those inputs are whitespace-separated flag lists that upstream deliberately expands unquoted from env vars. Quoting them would merge several flags into one argument, and an unquoted env var expansion is not script injection. The previous action.yml change only re-encoded the emoji in the description, which has no security effect, so I left action.yml unchanged. The inputs there already go through env:.
 
